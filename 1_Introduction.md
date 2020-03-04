@@ -13,6 +13,8 @@ An object holding all these attributes can be created with the SparkConf() const
 
 For the rest of this course you'll have a SparkContext called sc already available in your workspace.
 
+<img src="imgs\img0.png" width="600px" />
+
 ## Install
 
 setx SPARK_HOME D:\spark\spark-3.0.0-preview2-bin-hadoop2.7
@@ -25,6 +27,12 @@ Add to path: D:\spark\spark-3.0.0-preview2-bin-hadoop2.7\bin
 ## Connection
 
 ```python
+# Import SparkSession from pyspark.sql
+from pyspark.sql import SparkSession
+
+# Create my_spark
+my_spark = SparkSession.builder.getOrCreate()
+
 # Verify SparkContext
 print(sc)
 
@@ -33,71 +41,400 @@ print(sc.version)
 
 ```
 
-## Using Dataframes
-
-Spark's core data structure is the Resilient Distributed Dataset (RDD). This is a low level object that lets Spark work its magic by splitting data across multiple nodes in the cluster. However, RDDs are hard to work with directly, so in this course you'll be using the Spark DataFrame abstraction built on top of RDDs.
-
-The Spark DataFrame was designed to behave a lot like a SQL table (a table with variables in the columns and observations in the rows). Not only are they easier to understand, DataFrames are also more optimized for complicated operations than RDDs.
-
-When you start modifying and combining columns and rows of data, there are many ways to arrive at the same result, but some often take much longer than others. When using RDDs, it's up to the data scientist to figure out the right way to optimize the query, but the DataFrame implementation has much of this optimization built in!
-
-To start working with Spark DataFrames, you first have to create a SparkSession object from your SparkContext. You can think of the SparkContext as your connection to the cluster and the SparkSession as your interface with that connection.
-
-Remember, for the rest of this course you'll have a SparkSession called spark available in your workspace!
-
-We've already created a SparkSession for you called spark, but what if you're not sure there already is one? Creating multiple SparkSessions and SparkContexts can cause issues, so it's best practice to use the SparkSession.builder.getOrCreate() method. This returns an existing SparkSession if there's already one in the environment, or creates a new one if necessary!
-
-## Viewing tables
-
-Once you've created a SparkSession, you can start poking around to see what data is in your cluster!
-
-Your SparkSession has an attribute called catalog which lists all the data inside the cluster. This attribute has a few methods for extracting different pieces of information.
-
-One of the most useful is the .listTables() method, which returns the names of all the tables in your cluster as a list.
-
-## SQL on Spark
-One of the advantages of the DataFrame interface is that you can run SQL queries on the tables in your Spark cluster. If you don't have any experience with SQL, don't worry, we'll provide you with queries! (To learn more SQL, start with our Introduction to SQL course.)
-
-As you saw in the last exercise, one of the tables in your cluster is the flights table. This table contains a row for every flight that left Portland International Airport (PDX) or Seattle-Tacoma International Airport (SEA) in 2014 and 2015.
-
-Running a query on this table is as easy as using the .sql() method on your SparkSession. This method takes a string containing the query and returns a DataFrame with the results!
-
-If you look closely, you'll notice that the table flights is only mentioned in the query, not as an argument to any of the methods. This is because there isn't a local object in your environment that holds that data, so it wouldn't make sense to pass the table as an argument.
-
-Remember, we've already created a SparkSession called spark in your workspace. (It's no longer called my_spark because we created it for you!)
-
-## Pandafy a Spark Dataframe
-
-Suppose you've run a query on your huge dataset and aggregated it down to something a little more manageable.
-
-Sometimes it makes sense to then take that table and work with it locally using a tool like pandas. Spark DataFrames make that easy with the .toPandas() method. Calling this method on a Spark DataFrame returns the corresponding pandas DataFrame. It's as simple as that!
-
-## Spark in data
-
-In the last exercise, you saw how to move data from Spark to pandas. However, maybe you want to go the other direction, and put a pandas DataFrame into a Spark cluster! The SparkSession class has a method for this as well.
-
-The .createDataFrame() method takes a pandas DataFrame and returns a Spark DataFrame.
-
-The output of this method is stored locally, not in the SparkSession catalog. This means that you can use all the Spark DataFrame methods on it, but you can't access the data in other contexts.
-
-For example, a SQL query (using the .sql() method) that references your DataFrame will throw an error. To access the data in this way, you have to save it as a temporary table.
-
-You can do this using the .createTempView() Spark DataFrame method, which takes as its only argument the name of the temporary table you'd like to register. This method registers the DataFrame as a table in the catalog, but as this table is temporary, it can only be accessed from the specific SparkSession used to create the Spark DataFrame.
-
-There is also the method .createOrReplaceTempView(). This safely creates a new temporary table if nothing was there before, or updates an existing table if one was already defined. You'll use this method to avoid running into problems with duplicate tables.
-
-Check out the diagram to see all the different ways your Spark data structures interact with each other.
-
-<img src="imgs\img0.png" width="600px" />
-
-## DIfference Spark Context and Session
+## Difference Spark Context and Session
 
 Prior Spark 2.0, Spark Context was the entry point of any spark application and used to access all spark features and needed a sparkConf which had all the cluster configs and parameters to create a Spark Context object. We could primarily create just RDDs using Spark Context and we had to create specific spark contexts for any other spark interactions. For SQL SQLContext, hive HiveContext, streaming Streaming Application. In a nutshell, Spark session is a combination of all these different contexts. Internally, Spark session creates a new SparkContext for all the operations and also all the above-mentioned contexts can be accessed using the SparkSession object. (https://medium.com/@achilleus/spark-session-10d0d66d1d24)
 
-## Read from files
+## Basics reading and checking data
 
-Now you know how to put data into Spark via pandas, but you're probably wondering why deal with pandas at all? Wouldn't it be easier to just read a text file straight into Spark? Of course it would!
+### Reading
+- Parquet 
+```python
+df = my_spark.read.load(r'<path>.parquet')
+```
 
-uckily, your SparkSession has a .read attribute which has several methods for reading different data sources into Spark DataFrames. Using these you can create a DataFrame from a .csv file just like with regular pandas DataFrames!
+- CSV
 
-The variable file_path is a string with the path to the file airports.csv. This file contains information about different airports all over the world.
+```python
+df = spark.read.load(r"data/airports.csv",
+                     format="csv", sep=",", inferSchema="true", header="true")
+```
+
+- JSON
+
+```python
+path = r'data/people.json'
+peopleDF = spark.read.json(path)
+```
+
+### Creating Dataframes from Pandas
+
+- From JSON string:
+```python
+jsonStrings = ['{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}']
+otherPeopleRDD = sc.parallelize(jsonStrings)
+otherPeople = spark.read.json(otherPeopleRDD)
+otherPeople.show()
+```
+
+- From Pandas DF:
+```python
+xx = pd.DataFrame([[1,2,3],[2,3,4],[3,4,5]], columns = ["A", "B","C"])
+spark_df = sqlContext.createDataFrame(xx)
+```
+
+```python
+
+```
+
+### Basics
+- Collect:
+
+```python
+df.select("col1", "col2").collect()
+```
+- Print Schema
+
+```python
+df.printSchema()
+```
+
+### Catalog
+
+- List tables:
+
+```python
+spark.catalog.listTables()
+```
+
+- Create a table in Catalog:
+```python
+df.createOrReplaceTempView("vuelos")
+```
+
+- Load a table from Catalog to Spark Dataframe:
+
+```python
+flights = spark.table("vuelos")
+flights.show()
+```
+
+- Global View (not temporary)
+```python
+df.createGlobalTempView("people")
+spark.newSession().sql("SELECT * FROM global_temp.people").show()
+```
+
+### toPandas
+
+- Querying a table in Catalog and converting to Pandas:
+```python
+spark.sql("SELECT * FROM vuelos LIMIT 10").toPandas()
+```
+
+### select
+- Select multiple columns and show:
+
+```python
+df.select(df['id'], df['ident']).show()
+```
+
+## Creating columns (withColumns)
+
+- Create column "duration_hrs" from air_time column:
+```python
+flights = flights.withColumn("duration_hrs", flights.air_time/60)
+```
+
+
+## Filtering Data
+
+- SQL syntax:
+```python
+# Filter flights by passing a string
+long_flights1 = flights.filter("distance > 1000")
+```
+
+- Pandas syntax:
+```python
+# Filter flights by passing a column of boolean values
+long_flights2 = flights.filter(flights.distance > 1000)
+```
+
+## Select vs. With Column
+The difference between .select() and .withColumn() methods is that .select() returns only the columns you specify, while .withColumn() returns all the columns of the DataFrame in addition to the one you defined. It's often a good idea to drop columns you don't need at the beginning of an operation so that you're not dragging around extra data as you're wrangling. In this case, you would use .select() and not .withColumn().
+
+- Select and define masks as filters:
+
+```python
+# Select the first set of columns
+selected1 = flights.select("tailnum", "origin", "dest")
+
+# Select the second set of columns
+temp = flights.select(flights.origin, flights.dest, flights.carrier)
+
+# Define first filter
+filterA = flights.origin == "SEA"
+
+# Define second filter
+filterB = flights.dest == "PDX"
+
+# Filter the data, first by filterA then by filterB
+selected2 = temp.filter(filterA).filter(filterB)
+```
+
+## Alias and selectExpr()
+
+- Define an alias
+```python
+# Define avg_speed
+avg_speed = (flights.distance/(flights.air_time/60)).alias("avg_speed")
+```
+- Include the alias in the selection of columns without quotes:
+```python
+# Select the correct columns
+speed1 = flights.select("origin", "dest", "tailnum", avg_speed)
+```
+- Using selectExpr() notation we can do the same:
+```python
+# Create the same table using a SQL expression
+speed2 = flights.selectExpr("origin", "dest", "tailnum", "distance/(air_time/60) as avg_speed")
+```
+
+## Aggregating
+
+- Group by global:
+```python
+# Find the shortest flight from PDX in terms of distance
+flights.filter(flights.origin == "PDX").groupBy().min("distance").show()
+
+# Find the longest flight from SEA in terms of air time
+flights.filter(flights.origin == "SEA").groupBy().max("air_time").show()
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```

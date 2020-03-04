@@ -1,7 +1,7 @@
 ----------------------------------------------------------------
-Tue Mar 03 22:47:08 CET 2020:
-Booting Derby version The Apache Software Foundation - Apache Derby - 10.12.1.1 - (1704137): instance a816c00e-0170-a25d-e94d-000015850a80 
-on database directory D:\Google Drive\1.Estudis\3.CursosOnline\PySpark\DataCamp_PySpark\metastore_db with class loader org.apache.spark.sql.hive.client.IsolatedClientLoader$$anon$1@4931d791 
+Wed Mar 04 19:36:14 CET 2020:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.12.1.1 - (1704137): instance a816c00e-0170-a6d5-7cca-00001b128948 
+on database directory D:\Google Drive\1.Estudis\3.CursosOnline\PySpark\DataCamp_PySpark\metastore_db with class loader org.apache.spark.sql.hive.client.IsolatedClientLoader$$anon$1@7fa35c69 
 Loaded from file:/D:/spark/spark-3.0.0-preview2-bin-hadoop2.7/jars/derby-10.12.1.1.jar
 java.vendor=Oracle Corporation
 java.runtime.version=1.8.0_231-b11
