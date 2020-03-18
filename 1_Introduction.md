@@ -139,6 +139,10 @@ spark.sql("SELECT * FROM vuelos LIMIT 10").toPandas()
 df.select(df['id'], df['ident']).show()
 ```
 
+
+
+# 1. Data Manipulation
+
 ## Creating columns (withColumns)
 
 - Create column "duration_hrs" from air_time column:
@@ -213,57 +217,188 @@ flights.filter(flights.origin == "SEA").groupBy().max("air_time").show()
 ```
 
 ```python
+# Average duration of Delta flights
+flights.filter(flights.carrier == "DL").filter(flights.origin == "SEA").groupBy().avg("air_time").show()
 
+# Total hours in the air
+flights.withColumn("duration_hrs", flights.air_time/60).groupBy().sum("duration_hrs").show()
+```
+
+## Grouping
+
+```python
+# Group by variable
+by_plane = flights.groupBy("tailnum")
+
+# Count occurrences per group
+by_plane.count().show()
+
+# Group by origin
+by_origin = flights.groupBy("origin")
+
+# AVG on a variable
+by_origin.avg("air_time").show()
+```
+
+## Grouping and Aggregating - Functions
+
+```python
+# Import pyspark.sql.functions as F
+import pyspark.sql.functions as F
+
+# Group by month and dest
+by_month_dest = flights.groupBy("month","dest")
+
+# Average departure delay by month and destination
+by_month_dest.avg("dep_delay").show()
+
+# Standard deviation of departure delay
+by_month_dest.agg(F.stddev("dep_delay")).show()
+```
+
+## Join
+
+```python
+# Examine the data
+print(airports.show())
+
+# Rename the faa column
+airports = airports.withColumnRenamed("faa", "dest")
+
+# Join the DataFrames
+flights_with_airports = flights.join(airports, on = "dest", how = "leftouter")
+
+# Examine the new DataFrame
+print(flights_with_airports.show())
+```
+
+
+- Start from the "planes" dataframe:
+```sql
+-- planes
+--/root
+ |-- tailnum: string (nullable = true)
+ |-- year: string (nullable = true)
+ |-- type: string (nullable = true)
+ |-- manufacturer: string (nullable = true)
+ |-- model: string (nullable = true)
+ |-- engines: string (nullable = true)
+ |-- seats: string (nullable = true)
+ |-- speed: string (nullable = true)
+ |-- engine: string (nullable = true)
+
+```
+```sql
+-- flights
+ |-- year: string (nullable = true)
+ |-- month: string (nullable = true)
+ |-- day: string (nullable = true)
+ |-- dep_time: string (nullable = true)
+ |-- dep_delay: string (nullable = true)
+ |-- arr_time: string (nullable = true)
+ |-- arr_delay: string (nullable = true)
+ |-- carrier: string (nullable = true)
+ |-- tailnum: string (nullable = true)
+ |-- flight: string (nullable = true)
+ |-- origin: string (nullable = true)
+ |-- dest: string (nullable = true)
+ |-- air_time: string (nullable = true)
+ |-- distance: string (nullable = true)
+ |-- hour: string (nullable = true)
+ |-- minute: string (nullable = true)
 ```
 
 ```python
+# Rename year column
+planes = planes.withColumnRenamed("year", "plane_year")
 
+# Join the DataFrames
+model_data = flights.join(planes, on="tailnum", how="leftouter")
 ```
 
-```python
+# 2. Machine Learning Pipelines
 
+## Data types
+
+ That means all of the columns in your DataFrame must be either integers or decimals (called 'doubles' in Spark).
+ Unfortunately, Spark doesn't always guess right and you can see that some of the columns in our DataFrame are strings containing numbers as opposed to actual numeric values.
+
+ ### Cast
+ The only argument you need to pass to .cast() is the kind of value you want to create, in string form. For example, to create integers, you'll pass the argument "integer" and for decimal numbers you'll use "double". Cast only gets column data, not dataframe. 
+
+```python
+# Cast the columns to integers
+model_data = model_data.withColumn("arr_delay", model_data.arr_delay.cast("integer"))
+model_data = model_data.withColumn("air_time", model_data.air_time.cast("integer"))
+model_data = model_data.withColumn("month", model_data.month.cast("integer"))
+model_data = model_data.withColumn("plane_year", model_data.plane_year.cast("integer"))
+
+# Create new column
+# Create the column plane_age
+model_data = model_data.withColumn("plane_age", model_data.year - model_data.plane_year)
+
+# Create boolean
+model_data = model_data.withColumn("is_late", model_data.arr_delay > 0)
+
+# Convert boolean to an integer
+model_data = model_data.withColumn("label", model_data.is_late.cast("integer"))
+```
+## Remove missing values
+
+```python
+# Remove missing values
+model_data = model_data.filter("arr_delay is not NULL and dep_delay is not NULL and air_time is not NULL and plane_year is not NULL")
 ```
 
-```python
+## Modelling Pipeline
 
+### Strings and factors - One Hot Encoding
+
+In pyspark.ml.features:
+
+```python
+# Create a StringIndexer
+carr_indexer = StringIndexer(inputCol="carrier", outputCol="carrier_index")
+# Create a OneHotEncoder
+carr_encoder = OneHotEncoder(inputCol="carrier_index", outputCol="carrier_fact")
+
+# Create a StringIndexer
+dest_indexer = StringIndexer(inputCol="dest",outputCol="dest_index")
+# Create a OneHotEncoder
+dest_encoder = OneHotEncoder(inputCol="dest_index",outputCol="dest_fact")
+```
+### VectorAssembler
+
+The last step in the Pipeline is to combine all of the columns containing our features into a single column. This has to be done **before modeling can take place because every Spark modeling routine expects the data to be in this form**. You can do this by storing each of the values from a column as an entry in a vector. Then, from the model's point of view, **every observation is a vector that contains all of the information** about it and a **label that tells the modeler what value that observation corresponds to**.
+
+```python
+# Make a VectorAssembler and combine all of these columns into an assembler called "features"
+vec_assembler = VectorAssembler(inputCols=["month", "air_time", "carrier_fact", "dest_fact", "plane_age"], outputCol="features")
 ```
 
-```python
+### Pipeline
+Pipeline is a class in the pyspark.ml module that combines all the Estimators and Transformers that you've already created. This lets you reuse the same modeling process over and over again by wrapping it up in one simple object.
 
-```
-```python
-
-```
 
 ```python
+# Import Pipeline
+from pyspark.ml import Pipeline
 
-```
-
-```python
-
+# Make the pipeline
+flights_pipe = Pipeline(stages=[dest_indexer, dest_encoder, carr_indexer, carr_encoder, vec_assembler])
 ```
 
-```python
+#### Fit and transform
 
+```python
+# Fit and transform the data
+piped_data = flights_pipe.fit(model_data).transform(model_data)
 ```
 
+#### Split data randomSplit
 ```python
-
-```
-
-```python
-
-```
-```python
-
-```
-
-```python
-
-```
-
-```python
-
+# Split the data into training and test sets
+training, test = piped_data.randomSplit([.6, .4])
 ```
 
 ```python
